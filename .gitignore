@@ -142,7 +142,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# User-provided macOS artwork is retained for local preview only.
-public/local-macos/
+# Original .icns downloads stay local; converted PNGs in public/local-macos are deployed.
 *.icns
 /.local-icon-source/

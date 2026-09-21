@@ -21,7 +21,7 @@ const desktopItems: Array<{ label: string; appId: AppId; kind: string }> = [
 ];
 type SpotlightResult = { id: string; label: string; detail: string; category: 'Application' | 'Project' | 'Note' | 'Terminal'; appId: AppId };
 const terminalSuggestions = ['help', 'ls aboutme', 'cat aboutme/bio.txt', 'projects', 'neofetch'];
-const extraDockApps = import.meta.env.DEV ? [
+const extraDockApps = [
   { name: 'App Store', icon: '/local-macos/app-store.png' },
   { name: 'Google Chrome', icon: '/local-macos/chrome.png' },
   { name: 'GitHub', icon: '/local-macos/github.png' },
@@ -30,7 +30,7 @@ const extraDockApps = import.meta.env.DEV ? [
   { name: 'Spotify', icon: '/local-macos/spotify.png' },
   { name: 'WhatsApp', icon: '/local-macos/whatsapp.png' },
   { name: 'OBS Studio', icon: '/local-macos/obs.png' },
-] : [];
+];
 
 export function Desktop({ theme, onThemeChange }: DesktopProps) {
   const currentThemeIndex = themes.indexOf(theme);

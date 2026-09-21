@@ -1,6 +1,6 @@
 import type { AppDefinition, AppId } from '@/os/types';
 
-const localPreviewIcon = (name: string, fallback: string) => import.meta.env.DEV ? `/local-macos/${name}` : fallback;
+const localPreviewIcon = (name: string, fallback: string) => typeof window === 'undefined' ? fallback : `/local-macos/${name}`;
 const defaultWindow = { width: 760, height: 470, minWidth: 510, minHeight: 330, resizable: true };
 
 export const apps: Record<AppId, AppDefinition> = {
