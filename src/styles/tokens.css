@@ -1,0 +1,2 @@
+:root { --ink: #f7f7f9; --muted-ink: rgba(242,242,246,.57); --window: rgba(25,25,27,.89); --window-strong: rgba(17,17,19,.94); --line: rgba(255,255,255,.13); --sidebar: rgba(55,48,43,.45); --yellow: #f5c43b; }
+:root[data-theme='light'] { --ink: #202023; --muted-ink: rgba(32,32,35,.59); --window: rgba(246,244,238,.89); --window-strong: rgba(253,252,249,.94); --line: rgba(0,0,0,.13); --sidebar: rgba(230,224,214,.62); --yellow: #f3c23a; }

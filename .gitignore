@@ -141,3 +141,8 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# User-provided macOS artwork is retained for local preview only.
+public/local-macos/
+*.icns
+/.local-icon-source/
