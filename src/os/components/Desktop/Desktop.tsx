@@ -31,6 +31,14 @@ const extraDockApps = [
   { name: 'WhatsApp', icon: '/local-macos/whatsapp.png' },
   { name: 'OBS Studio', icon: '/local-macos/obs.png' },
 ];
+const GURGAON = { latitude: 28.4595, longitude: 77.0266 };
+type WeatherSnapshot = { temperature: number; feelsLike: number; high: number; low: number; wind: number; code: number; updatedAt: Date };
+type Todo = { id: string; label: string; done: boolean };
+const initialTodos: Todo[] = [
+  { id: 'portfolio', label: 'Portfolio polish', done: false },
+  { id: 'projects', label: 'Review projects', done: false },
+  { id: 'resume', label: 'Update resume', done: false },
+];
 
 export function Desktop({ theme, onThemeChange }: DesktopProps) {
   const currentThemeIndex = themes.indexOf(theme);
@@ -59,12 +67,44 @@ export function Desktop({ theme, onThemeChange }: DesktopProps) {
   const resetWindows = useWindowStore((state) => state.reset);
   const setBoot = useSystemStore((state) => state.setBoot);
   const [currentDesktop, setCurrentDesktop] = useState(1);
+  const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
+  const [weatherStatus, setWeatherStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [todos, setTodos] = useState<Todo[]>(() => {
+    try {
+      const saved = window.localStorage.getItem('portfolio-todos');
+      if (!saved) return initialTodos;
+      const parsed = JSON.parse(saved) as Array<{ id?: string; done?: boolean }>;
+      if (!Array.isArray(parsed)) return initialTodos;
+      return initialTodos.map((todo) => ({ ...todo, done: parsed.find((item) => item.id === todo.id)?.done === true }));
+    } catch { return initialTodos; }
+  });
   const gesture = useRef<{ startX: number; currentX: number; count: number } | null>(null);
   const horizontalTravel = useRef(0);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    try { window.localStorage.setItem('portfolio-todos', JSON.stringify(todos)); } catch { /* Storage may be disabled by the visitor. */ }
+  }, [todos]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadWeather = async () => {
+      try {
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${GURGAON.latitude}&longitude=${GURGAON.longitude}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=Asia%2FKolkata`);
+        if (!response.ok) throw new Error('Weather request failed');
+        const data = await response.json() as { current: { temperature_2m: number; apparent_temperature: number; weather_code: number; wind_speed_10m: number }; daily: { temperature_2m_max: number[]; temperature_2m_min: number[] } };
+        if (cancelled) return;
+        setWeather({ temperature: data.current.temperature_2m, feelsLike: data.current.apparent_temperature, code: data.current.weather_code, wind: data.current.wind_speed_10m, high: data.daily.temperature_2m_max[0], low: data.daily.temperature_2m_min[0], updatedAt: new Date() });
+        setWeatherStatus('ready');
+      } catch {
+        if (!cancelled) setWeatherStatus('unavailable');
+      }
+    };
+    void loadWeather();
+    const refresh = window.setInterval(() => void loadWeather(), 30 * 60 * 1000);
+    return () => { cancelled = true; window.clearInterval(refresh); };
   }, []);
 
   const activeAppId = focusedWindowId && windows[focusedWindowId]?.spaceId === currentDesktop ? windows[focusedWindowId]?.appId ?? 'finder' : 'finder';
@@ -200,8 +240,11 @@ export function Desktop({ theme, onThemeChange }: DesktopProps) {
       {desktopItems.map(({ label, kind, appId }) => <button type="button" key={label} className={`desktop-item ${kind}${selectedDesktopItem === label ? ' selected' : ''}`} onClick={() => selectDesktopItem(label, appId)} aria-pressed={selectedDesktopItem === label}><span className="desktop-item-art" aria-hidden="true"><img src={apps[appId].icon} alt="" /></span><span>{label}</span></button>)}
     </nav>
     <aside className="desktop-widgets" aria-label="Portfolio widgets">
-      <section className="widget widget-agenda"><div className="widget-date"><strong>{formatWeekday(now)}</strong><span>{now.getDate()}</span></div><div><p>UP NEXT</p><b>Portfolio polish</b><small>Today · focus block</small><span className="widget-event-dot" /> <small>Frontend review</small></div></section>
-      <section className="widget widget-weather"><div><p>WORKSPACE</p><b>Build mode</b><small>Frontend foundation</small></div><strong>⌁</strong></section>
+      <div className="widgets-top-row">
+        <section className="widget widget-agenda" aria-label="Today's calendar"><p>{formatWeekday(now)}</p><span>{now.getDate()}</span><small>{new Intl.DateTimeFormat(undefined, { month: 'short' }).format(now)}</small><div className="widget-calendar-event"><i aria-hidden="true" /><b>Portfolio review</b><small>Today · 5:00 PM</small></div></section>
+        <section className="widget widget-todos" aria-label="To-do list"><header><p>TO-DO</p><b>{todos.filter((todo) => !todo.done).length}</b></header><div>{todos.map((todo) => <button type="button" key={todo.id} className={todo.done ? 'done' : ''} onClick={() => setTodos((items) => items.map((item) => item.id === todo.id ? { ...item, done: !item.done } : item))}><span aria-hidden="true">{todo.done ? '✓' : ''}</span><small>{todo.label}</small></button>)}</div></section>
+      </div>
+      <section className="widget widget-weather" aria-live="polite"><div><p>GURGAON, HARYANA</p>{weatherStatus === 'ready' && weather ? <><b>{Math.round(weather.temperature)}°</b><small>{weatherCondition(weather.code)} · feels like {Math.round(weather.feelsLike)}°</small></> : <><b>{weatherStatus === 'loading' ? '—' : 'Unavailable'}</b><small>{weatherStatus === 'loading' ? 'Loading live conditions…' : 'Weather service is unavailable'}</small></>}</div><strong aria-hidden="true">{weather ? weatherSymbol(weather.code) : '◌'}</strong>{weather && <footer><span>H:{Math.round(weather.high)}°</span><span>L:{Math.round(weather.low)}°</span><span>Wind {Math.round(weather.wind)} km/h</span><time>Updated {formatWeatherTime(weather.updatedAt)}</time></footer>}</section>
       <section className="widget widget-market"><header><b>PORTFOLIO PULSE</b><small>Preview</small></header><WidgetMetric label="GitHub" value="Connect later" tone="up" /><WidgetMetric label="LeetCode" value="Connect later" tone="flat" /><WidgetMetric label="CodeChef" value="Connect later" tone="down" /></section>
     </aside>
     {visibleWindows.map((windowState) => <WindowFrame windowState={windowState} key={windowState.id}>{renderApp(windowState.appId)}</WindowFrame>)}
@@ -236,6 +279,9 @@ function renderApp(appId: AppId) {
 
 function formatMenuTime(date: Date) { return new Intl.DateTimeFormat(undefined, { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(date); }
 function formatWeekday(date: Date) { return new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(date).toUpperCase(); }
+function formatWeatherTime(date: Date) { return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(date); }
+function weatherCondition(code: number) { if (code === 0) return 'Clear sky'; if (code <= 3) return 'Partly cloudy'; if (code <= 48) return 'Foggy'; if (code <= 55) return 'Drizzle'; if (code <= 57) return 'Freezing drizzle'; if (code <= 65) return 'Rain'; if (code <= 67) return 'Freezing rain'; if (code <= 77) return 'Snowfall'; if (code <= 82) return 'Rain showers'; if (code <= 86) return 'Snow showers'; if (code === 95) return 'Thunderstorm'; return 'Storm with hail'; }
+function weatherSymbol(code: number) { if (code === 0) return '☀'; if (code <= 3) return '⛅'; if (code <= 48) return '☁'; if (code <= 67) return '☔'; if (code <= 77 || (code >= 85 && code <= 86)) return '❄'; if (code <= 82) return '☔'; return 'ϟ'; }
 function profileName() { return 'Portfolio'; }
 function isTypingTarget(target: EventTarget | null) { return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable); }
 function averageTouchX(touches: { length: number; [index: number]: { clientX: number } }) { let total = 0; for (let index = 0; index < touches.length; index += 1) total += touches[index].clientX; return total / Math.max(touches.length, 1); }

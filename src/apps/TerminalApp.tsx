@@ -1,18 +1,18 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
-import { profile, projects, skills } from '@/data/content';
+import { achievements, experience, profile, projects, skills } from '@/data/content';
 import type { AppId } from '@/os/types';
 import type { Theme } from '@/os/stores/systemStore';
 
 const appAliases: Record<string, AppId> = { finder: 'finder', notes: 'notes', terminal: 'terminal', safari: 'safari', messages: 'messages', maps: 'maps', photos: 'photos', calendar: 'calendar', code: 'vscode', vscode: 'vscode', x: 'x', settings: 'settings', trash: 'trash' };
-const allCommands = ['about', 'cat', 'cd', 'clear', 'contact', 'date', 'echo', 'help', 'history', 'ls', 'neofetch', 'open', 'project', 'projects', 'pwd', 'skills', 'socials', 'sudo', 'theme', 'whoami'];
+const allCommands = ['about', 'achievements', 'cat', 'cd', 'clear', 'contact', 'date', 'echo', 'experience', 'gsoc', 'help', 'history', 'ls', 'neofetch', 'open', 'project', 'projects', 'pwd', 'resume', 'skills', 'socials', 'sudo', 'theme', 'whoami'];
 const virtualDirectories: Record<string, string[]> = {
-  '~': ['aboutme/', 'projects/', 'skills/', 'socials/', 'contact.txt', 'resume.pdf'],
+  '~': ['aboutme/', 'projects/', 'skills/', 'socials/', 'experience.txt', 'achievements.txt', 'resume.pdf'],
   '~/aboutme': ['bio.txt', 'stack.txt', 'now.txt'],
   '~/projects': projects.map((project) => `${project.slug}.md`),
   '~/skills': ['frontend.txt', 'tools.txt'],
   '~/socials': ['github.url', 'linkedin.url'],
 };
-type CommandResult = { lines: string[]; launch?: AppId; cwd?: string };
+type CommandResult = { lines: string[]; launch?: AppId; cwd?: string; openUrl?: string };
 
 export function TerminalApp() {
   const [lines, setLines] = useState<string[]>(['Last login: today on ttys001', 'Type "help" to explore this portfolio.']);
@@ -31,6 +31,7 @@ export function TerminalApp() {
     if (normalized === 'theme' && (argument === 'dark' || argument === 'light' || argument === 'auto')) window.dispatchEvent(new CustomEvent<Theme>('portfolio:set-theme', { detail: argument }));
     const result = commandResult(normalized, argument, cwd, commandHistory);
     if (result.launch) window.dispatchEvent(new CustomEvent<AppId>('portfolio:launch-app', { detail: result.launch }));
+    if (result.openUrl) window.open(result.openUrl, '_blank', 'noopener,noreferrer');
     if (result.cwd) setCwd(result.cwd);
     setCommandHistory((current) => [...current, trimmed]);
     setHistoryIndex(null);
@@ -49,12 +50,15 @@ export function TerminalApp() {
 }
 
 function commandResult(command: string, argument: string, cwd: string, history: string[]): CommandResult {
-  if (command === 'help') return { lines: ['Standard shell: ls [path], cd <directory>, pwd, cat <file>, history, clear.', 'Portfolio: about, projects, project <name>, skills, contact, socials, open <app>.', 'Try: ls aboutme  ·  cat aboutme/bio.txt  ·  cd projects  ·  ls'] };
-  if (command === 'about') return { lines: [profile.bio, `${profile.role} · ${profile.location}`] };
+  if (command === 'help') return { lines: ['Standard shell: ls [path], cd <directory>, pwd, cat <file>, history, clear.', 'Portfolio: about, projects, project <name>, skills, experience, gsoc, achievements, contact, socials, resume, open <app>.', 'Try: projects  ·  project pitwolf  ·  experience  ·  gsoc'] };
+  if (command === 'about') return { lines: [profile.bio, `${profile.role} · ${profile.location}`].filter(Boolean) };
   if (command === 'projects') return { lines: projects.map((project, index) => `${index + 1}. ${project.name} — ${project.tagline}`) };
-  if (command === 'project') { const project = projects.find((entry, index) => entry.slug === argument || entry.name.toLowerCase() === argument.toLowerCase() || String(index + 1) === argument); return { lines: project ? [`${project.name} (${project.year})`, project.description, `Stack: ${project.stack.join(' · ')}`] : ['Usage: project <name or number>'] }; }
+  if (command === 'project') { const project = projects.find((entry, index) => entry.slug === argument.toLowerCase() || entry.name.toLowerCase() === argument.toLowerCase() || String(index + 1) === argument); return { lines: project ? [`${project.name} (${project.year})`, project.description, `Stack: ${project.stack.join(' · ')}`, ...(project.liveUrl ? [`Live: ${project.liveUrl}`] : []), ...(project.repoUrl ? [`Source: ${project.repoUrl}`] : [])] : ['Usage: project <name or number>'] }; }
   if (command === 'skills') return { lines: Object.entries(skills).map(([group, entries]) => `${group}: ${entries.join(' · ')}`) };
-  if (command === 'contact') return { lines: [profile.email, `GitHub: ${profile.socials.github}`, `LinkedIn: ${profile.socials.linkedin}`] };
+  if (command === 'experience') return { lines: experience.flatMap((entry) => [`${entry.role} · ${entry.organization}`, `${entry.period}${entry.location ? ` · ${entry.location}` : ''}`, ...entry.highlights.map((highlight) => `  • ${highlight}`), '']) };
+  if (command === 'gsoc') { const contribution = experience.find((entry) => entry.organization.includes('Google Summer of Code')); return { lines: contribution ? [`${contribution.organization} · ${contribution.period}`, ...contribution.highlights.map((highlight) => `• ${highlight}`)] : ['GSoC contribution details are not available yet.'] }; }
+  if (command === 'achievements') return { lines: achievements.map((achievement) => `• ${achievement}`) };
+  if (command === 'contact') return { lines: [`GitHub: ${profile.socials.github}`, `LinkedIn: ${profile.socials.linkedin}`, `X: ${profile.socials.x}`] };
   if (command === 'socials') return { lines: Object.entries(profile.socials).map(([name, url]) => `${name}: ${url}`) };
   if (command === 'whoami') return { lines: ['guest'] };
   if (command === 'date') return { lines: [new Date().toString()] };
@@ -65,7 +69,8 @@ function commandResult(command: string, argument: string, cwd: string, history: 
   if (command === 'ls') return listDirectory(argument, cwd);
   if (command === 'cd') return changeDirectory(argument, cwd);
   if (command === 'cat') return readFile(argument, cwd);
-  if (command === 'open') { const app = appAliases[argument.toLowerCase()]; return app ? { lines: [`Opening ${argument}…`], launch: app } : { lines: [`open: unknown app: ${argument}`] }; }
+  if (command === 'resume') return { lines: ['Opening Aryan_Resume.pdf…'], openUrl: '/resume.pdf' };
+  if (command === 'open') { const app = appAliases[argument.toLowerCase()]; const project = projects.find((entry) => entry.slug === argument.toLowerCase() || entry.name.toLowerCase() === argument.toLowerCase()); return app ? { lines: [`Opening ${argument}…`], launch: app } : project && (project.liveUrl || project.repoUrl) ? { lines: [`Opening ${project.name}…`], openUrl: project.liveUrl ?? project.repoUrl } : { lines: [`open: unknown app or project: ${argument}`] }; }
   if (command === 'theme') return argument === 'dark' || argument === 'light' || argument === 'auto' ? { lines: [`Theme changed to ${argument}.`], launch: 'settings' as AppId } : { lines: ['Usage: theme <dark|light|auto>'] };
   if (command === 'sudo') return { lines: ['guest is not in the sudoers file. This incident will be reported.'] };
   if (command === 'rm' && argument === '-rf /') return { lines: ['Nice try. This desktop values its files.'] };
@@ -109,6 +114,8 @@ function fileContents(path: string): string[] | null {
   if (path === '~/skills/frontend.txt') return [skills.Frontend?.join(' · ') ?? ''];
   if (path === '~/skills/tools.txt') return [skills.Tools?.join(' · ') ?? ''];
   if (path === '~/contact.txt') return [profile.email];
+  if (path === '~/experience.txt') return experience.flatMap((entry) => [`${entry.role} · ${entry.organization} (${entry.period})`, ...entry.highlights.map((highlight) => `- ${highlight}`), '']);
+  if (path === '~/achievements.txt') return achievements;
   if (path === '~/socials/github.url') return [profile.socials.github];
   if (path === '~/socials/linkedin.url') return [profile.socials.linkedin];
   if (path === '~/resume.pdf') return ['Resume placeholder. Add public/resume.pdf when ready.'];
